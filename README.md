@@ -1,4 +1,23 @@
 
+# Before Read
+
+This repository is forked from alphageometry with some modified. You should have uv in your environment and use it to create a virtual environment to run this project. 
+
+If it is the first time you run it, you can excute the following command:
+
+```
+bash run.sh
+```
+
+And if the operating environment has been configured, you can excute the following command to test:
+
+```
+bash solve.sh <problem_name> [problems_file]
+```
+
+You can also run your own scripts using solve.sh or other commands to test automatically.
+
+
 # Solving Olympiad Geometry without Human Demonstrations
 
 

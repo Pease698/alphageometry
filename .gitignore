@@ -22,3 +22,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+.venv/
+meliad_lib/
+ag_ckpt_vocab/

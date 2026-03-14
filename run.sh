@@ -17,10 +17,12 @@
 set -e
 set -x
 
-virtualenv -p python3 .
-source ./bin/activate
+uv venv
+source .venv/bin/activate
 
-pip install --require-hashes -r requirements.txt
+uv pip install "setuptools<70.0.0"
+
+uv pip install -r requirements.txt -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 gdown --folder https://bit.ly/alphageometry
 DATA=ag_ckpt_vocab
@@ -62,7 +64,7 @@ LM_ARGS=(
 
 echo $PYTHONPATH
 
-python -m alphageometry \
+uv run python -m alphageometry \
 --alsologtostderr \
 --problems_file=$(pwd)/examples.txt \
 --problem_name=orthocenter \
