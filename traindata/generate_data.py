@@ -1,6 +1,7 @@
 import os
 import sys
 import random
+import json
 
 # 动态配置系统路径，确保能无缝调用 reuse 里的模块
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +91,7 @@ def generate_data(num_extra_clauses = 5, file_path = None):
     :param file_path: 可选参数，指定将生成的数据保存到哪个文件
     """
     output_flag = True
-    if file_path == None:
+    if file_path is not None:
         output_flag = False
 
     if output_flag:
@@ -165,76 +166,110 @@ def generate_data(num_extra_clauses = 5, file_path = None):
         # 提取原始逻辑链
         setup_raw, aux_raw, log_raw, setup_points = trace_back.get_logs(target_dep, g, merge_trivials=True)
 
-        # 初始化全局引用字典 (Reference ID Dictionary)，将所有 Dependency 对象的 Hash 值映射为一个整数 ID (例如 00, 01)
-        refs = {} 
+        if file_path is not None and len(aux_raw) == 0:
+            print("[-] 没有辅助点，重新生成")
+            continue # 如果没有辅助构造点，则重新生成
 
-        # 分发引用编号并按点分组。point_log 会将孤立的已知条件，按照它们界定了哪个“点”来进行打包，同时给每个事实分配 refs
-        setup_grouped = trace_back.point_log(setup_raw, refs, set())
-        aux_grouped = trace_back.point_log(aux_raw, refs, setup_points)
+        if file_path is not None:
+            # 提取 DSL 格式的输入 (Input)
+            # 使用 pretty.pretty 函数将 Dependency 对象转回类似 "T a b c d" 的底层符号串
+            setup_dsl = [pretty.pretty([dep.name] + [a.name if hasattr(a, 'name') else str(a) for a in dep.args]) for dep in setup_raw]
+            
+            target_args = [a.name if hasattr(a, 'name') else str(a) for a in target_dep.args]
+            target_dsl = pretty.pretty([target_dep.name] + target_args)
 
-        if output_flag:
-            print("\n========================================================")
-            print("合成几何题生成完毕 (Synthetic Data Ready)")
-            print("========================================================")
-    
-            print("\n * From theorem premises (精简初始条件):")
+            # 提取 DSL 格式的标签 (Label - 辅助点)
+            aux_dsl = [pretty.pretty([dep.name] + [a.name if hasattr(a, 'name') else str(a) for a in dep.args]) for dep in aux_raw]
 
-        # 遍历打包后的初始条件
-        for points, cons in setup_grouped:
-            pts_names = ",".join(p.name.upper() for p in points)
-            if output_flag:
-                print(f"  {pts_names} : Points")
-                for dep in cons:
-                    print(f"  {format_dep(dep, refs)}")
+            # 构建训练样本字典
+            training_sample = {
+                "problem_id": f"synthetic_{random.randint(10000, 99999)}",
+                "premises": setup_dsl,        # 模型输入 1
+                "target": target_dsl,         # 模型输入 2
+                "auxiliary_points": aux_dsl,  # 模型预测标签
+                "proof_length": len(log_raw)  # 元数据：可用于后续按难度过滤数据
+            }
 
-        if output_flag:
-            print("\n * Auxiliary Constructions (辅助构造点):")
-        if not aux_grouped:
-            if output_flag:
-                print("  (None)")
+            #以追加模式 ('a') 写入 JSONL 文件
+            try:
+                with open(file_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(training_sample, ensure_ascii=False) + '\n')
+                # 写入成功后退出循环
+                break 
+            except Exception as e:
+                print(f"写入文件失败: {e}")
+                break
         else:
-            for points, cons in aux_grouped:
+            # 初始化全局引用字典 (Reference ID Dictionary)，将所有 Dependency 对象的 Hash 值映射为一个整数 ID (例如 00, 01)
+            refs = {} 
+
+            # 分发引用编号并按点分组。point_log 会将孤立的已知条件，按照它们界定了哪个“点”来进行打包，同时给每个事实分配 refs
+            setup_grouped = trace_back.point_log(setup_raw, refs, set())
+            aux_grouped = trace_back.point_log(aux_raw, refs, setup_points)
+
+            if output_flag:
+                print("\n========================================================")
+                print("合成几何题生成完毕 (Synthetic Data Ready)")
+                print("========================================================")
+    
+                print("\n * From theorem premises (精简初始条件):")
+
+            # 遍历打包后的初始条件
+            for points, cons in setup_grouped:
                 pts_names = ",".join(p.name.upper() for p in points)
                 if output_flag:
                     print(f"  {pts_names} : Points")
                     for dep in cons:
                         print(f"  {format_dep(dep, refs)}")
 
-        # 处理目标结论的自然语言表达
-        t_args = [arg.name if hasattr(arg, 'name') else str(arg) for arg in target_dep.args]
-        target_str = pretty.pretty_nl(target_dep.name, t_args) or pretty.pretty([target_dep.name] + t_args)
-        if output_flag:
-            print(f"\n * Target Conclusion (求证目标):\n  ? {target_str}")
-
-            print("\n * Proof steps (精简证明过程):")
-
-        for step_idx, (premises, conclusions) in enumerate(log_raw):
-            # 获取前提的字符串表示 (带着引用编号)
-            prem_strs = [format_dep(p, refs) for p in premises]
-            
-            # 对于当前步骤推导出的新结论，我们需要为它们注册新的 refs 编号
-            for c in conclusions:
-                if c.hashed() not in refs:
-                    refs[c.hashed()] = len(refs) # 分配新编号
-                
-                c_str = format_dep(c, refs)
-                prem_text = " & ".join(prem_strs) if prem_strs else "已知"
-                
-                # 尝试翻译规则名，如果是空说明是代数替换或合并等平凡步骤
-                rule = f"({c.rule_name})" if c.rule_name else ""
-                
-                # 打印出标准格式： 001. 前提1 [01] & 前提2 [05] (定理) => 结论 [06]
+            if output_flag:
+                print("\n * Auxiliary Constructions (辅助构造点):")
+            if not aux_grouped:
                 if output_flag:
-                    print(f"  {step_idx + 1:03d}. {prem_text} {rule} ⇒  {c_str}")
+                    print("  (None)")
+            else:
+                for points, cons in aux_grouped:
+                    pts_names = ",".join(p.name.upper() for p in points)
+                    if output_flag:
+                        print(f"  {pts_names} : Points")
+                        for dep in cons:
+                            print(f"  {format_dep(dep, refs)}")
 
-        if output_flag:
-            print("========================================================")
-        break
+            # 处理目标结论的自然语言表达
+            t_args = [arg.name if hasattr(arg, 'name') else str(arg) for arg in target_dep.args]
+            target_str = pretty.pretty_nl(target_dep.name, t_args) or pretty.pretty([target_dep.name] + t_args)
+            if output_flag:
+                print(f"\n * Target Conclusion (求证目标):\n  ? {target_str}")
+
+                print("\n * Proof steps (精简证明过程):")
+
+            for step_idx, (premises, conclusions) in enumerate(log_raw):
+                # 获取前提的字符串表示 (带着引用编号)
+                prem_strs = [format_dep(p, refs) for p in premises]
+
+                # 对于当前步骤推导出的新结论，我们需要为它们注册新的 refs 编号
+                for c in conclusions:
+                    if c.hashed() not in refs:
+                        refs[c.hashed()] = len(refs) # 分配新编号
+
+                    c_str = format_dep(c, refs)
+                    prem_text = " & ".join(prem_strs) if prem_strs else "已知"
+
+                    # 尝试翻译规则名，如果是空说明是代数替换或合并等平凡步骤
+                    rule = f"({c.rule_name})" if c.rule_name else ""
+
+                    # 打印出标准格式： 001. 前提1 [01] & 前提2 [05] (定理) => 结论 [06]
+                    if output_flag:
+                        print(f"  {step_idx + 1:03d}. {prem_text} {rule} ⇒  {c_str}")
+
+            if output_flag:
+                print("========================================================")
+            break
 
 
 def main():
-    file_path = os.path.join(PROJECT_ROOT, 'synthetic_data.txt')
-    generate_data(20)
+    file_path = os.path.join(PROJECT_ROOT, 'synthetic_data.jsonl')
+    generate_data(20, file_path)
 
 
 if __name__ == "__main__":
