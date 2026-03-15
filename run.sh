@@ -30,7 +30,7 @@ DATA=ag_ckpt_vocab
 MELIAD_PATH=meliad_lib/meliad
 mkdir -p $MELIAD_PATH
 git clone https://github.com/google-research/meliad $MELIAD_PATH
-export PYTHONPATH=$PYTHONPATH:$MELIAD_PATH
+export PYTHONPATH=$PYTHONPATH:$MELIAD_PATH:origin:reuse
 
 DDAR_ARGS=(
   --defs_file=$(pwd)/defs.txt \
