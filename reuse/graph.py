@@ -494,10 +494,18 @@ class Graph:
     check = False
     g = None
     added = None
+
+    max_retries = 50  # max retry times
+    retries = 0       # current retry times
+
     if verbose:
       logging.info(pr.url)
       logging.info(pr.txt())
     while not check:
+      if retries >= max_retries:
+        raise ValueError(f"Failed to build problem after {max_retries} attempts.")
+      retries += 1
+
       try:
         g = Graph()
         added = []
