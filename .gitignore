@@ -28,3 +28,4 @@ meliad_lib/
 ag_ckpt_vocab/
 
 traindata/*.jsonl
+mini_ag_weights/
