@@ -27,4 +27,4 @@ MANIFEST
 meliad_lib/
 ag_ckpt_vocab/
 
-traindata/synthetic_data.jsonl
+traindata/*.jsonl

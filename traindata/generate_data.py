@@ -155,8 +155,13 @@ def generate_random_premises(num_extra_clauses = 3, dof_chooser = 0.7):
     points = ['a', 'b', 'c']
     premises_str = "a b c = triangle"
     
-    # 准备英文字母表，用于给新产生的点命名
-    available_names = [chr(i) for i in range(100, 123)] # d 到 z
+    # 用于给新产生的点命名
+    available_names = []
+    for i in range(3, 3 + num_extra_clauses):
+        if i < 26:
+            available_names.append(chr(97 + i))
+        else:
+            available_names.append(chr(97 + i % 26) + str(i // 26))
     
     # 直接唯一确定一个点
     actions_0dof = [
@@ -217,10 +222,8 @@ def generate_data(num_extra_clauses = 5, dof_chooser = 0.7, num_targets = 3, out
     :param num_extra_clauses: 额外添加的随机前提数量
     :param dof_chooser: 选择 0dof 作图的概率，剩余概率为 1dof 作图
     :param num_targets: 随机选择以进行回溯的目标结论数量
-    :param output_flag: 是否输出没有辅助点构造的证明
+    :param output_flag: 是否输出没有辅助点构造的证明，False 表示仅输出包含辅助点的证明
     """
-    print("=== 启动 AlphaGeometry 微型数据生成器 ===")
-
     # 加载几何定义和推理规则
     defs_path = os.path.join(PROJECT_ROOT, 'defs.txt')
     rules_path = os.path.join(PROJECT_ROOT, 'rules.txt')
@@ -325,7 +328,7 @@ def worker_generate_single_graph(args):
     """
     Worker 函数：在一个独立的进程中运行，直到成功生成一张有效图的数据并返回。
     """
-    num_extra_clauses, dof_chooser, num_targets, task_id = args
+    num_extra_clauses, dof_chooser, num_targets, activation_threshold, task_id = args
 
     defs_path = os.path.join(PROJECT_ROOT, 'defs.txt')
     rules_path = os.path.join(PROJECT_ROOT, 'rules.txt')
@@ -362,6 +365,9 @@ def worker_generate_single_graph(args):
             # 寻找包含辅助点的数据
             if len(aux_raw) == 0:
                 continue 
+            elif random.randint(1, activation_threshold) > len(log_raw):
+                continue
+
 
             setup_dsl = [pretty.pretty([dep.name] + [a.name if hasattr(a, 'name') else str(a) for a in dep.args]) for dep in setup_raw]
             target_args = [a.name if hasattr(a, 'name') else str(a) for a in target_dep.args]
@@ -383,11 +389,12 @@ def worker_generate_single_graph(args):
 
 
 def main():
-    num_extra_clauses = 20
+    num_extra_clauses = 25
     dof_chooser = 0.5
-    num_targets = 30
+    num_targets = 50
     output_flag = True
-    file_path = os.path.join(PROJECT_ROOT, 'traindata/synthetic_data.jsonl')
+    activation_threshold = 12
+    file_path = os.path.join(PROJECT_ROOT, 'traindata/test_data.jsonl')
 
     print("=== 启动 AlphaGeometry 多核并发数据生成引擎 ===")
     
@@ -409,7 +416,7 @@ def main():
     total_graphs_to_generate = 12
     
     # 构建任务队列：(num_extra_clauses, num_targets, task_id)
-    tasks = [(num_extra_clauses, dof_chooser, num_targets, i) for i in range(total_graphs_to_generate)]
+    tasks = [(num_extra_clauses, dof_chooser, num_targets, activation_threshold, i) for i in range(total_graphs_to_generate)]
 
     total_samples_saved = 0
 
