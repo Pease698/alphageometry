@@ -145,10 +145,11 @@ def write_solution(g: graph.Graph, p: problem.Problem, out_file: str) -> None:
         print(f'Solution written to {out_file}.')
 
 
-def generate_random_premises(num_extra_clauses=3):
+def generate_random_premises(num_extra_clauses = 3, dof_chooser = 0.7):
     """
     随机前提生成器
     :param num_extra_clauses: 除了基础三角形外，想要额外添加的随机前提数量
+    :param dof_chooser: 选择 0dof 作图的概率，剩余概率为 1dof 作图
     """
     points = ['a', 'b', 'c']
     premises_str = "a b c = triangle"
@@ -156,36 +157,49 @@ def generate_random_premises(num_extra_clauses=3):
     # 准备英文字母表，用于给新产生的点命名
     available_names = [chr(i) for i in range(100, 123)] # d 到 z
     
-    # 定义辅助作图动作池
-    # 格式：(动作名称, 该动作需要的已知点数量)
-    safe_actions = [
-        ("midpoint", 2),   # 取两点连线的中点
-        ("on_line", 2),    # 在两点连线上任取一点
-        ("on_bline", 2),   # 在两点中垂线上任取一点
-        ("foot", 3),       # 作一点到另外两点连线的垂足
-        ("on_pline", 3),   # 过一点作另外两点连线的平行线，并在上面任取一点
-        ("on_tline", 3),   # 过一点作另外两点连线的垂线，并在上面任取一点
+    # 直接唯一确定一个点
+    actions_0dof = [
+        ("midpoint", 2),       # 中点
+        ("foot", 3),           # 垂足
+        ("circumcenter", 3),   # 外心
+        ("orthocenter", 3)     # 垂心
+    ]
+
+    # 两约束条件共同确定一个点
+    actions_1dof = [
+        ("on_line", 2),    # 在两点连线上
+        ("on_bline", 2),   # 在两点中垂线上
+        ("on_pline", 3),   # on_pline p a b c   ->  p 在过 a 平行 bc 的线上
+        ("on_tline", 3),   # on_tline p a b c   ->  p 在过 a 垂直 bc 的线上
+        ("on_circum", 3)   # on_circum p a b c  ->  p 在 abc 外接圆上
     ]
     
     # 循环生成随机作图步骤
     for _ in range(num_extra_clauses):
         if not available_names:
             break # 字母用完则停止
-            
-        # 随机挑选一个作图动作
-        action, required_points = random.choice(safe_actions)
-        
-        # 从已经存在的点中，随机抽取不重复的点作为动作的输入
-        sampled_points = random.sample(points, required_points)
         
         # 取出一个新字母作为新点的名字
         new_p = available_names.pop(0)
-        
-        # 语法格式："新点 = 动作 新点 已知点1 已知点2 ..."
-        if required_points == 2:
-            clause = f"{new_p} = {action} {new_p} {sampled_points[0]} {sampled_points[1]}"
-        elif required_points == 3:
-            clause = f"{new_p} = {action} {new_p} {sampled_points[0]} {sampled_points[1]} {sampled_points[2]}"
+
+        # 随机决定使用 0dof 作图还是 1dof 作图
+        if random.random() < dof_chooser:
+            action, req_pts = random.choice(actions_0dof)
+            sampled = random.sample(points, req_pts)
+            args_str = " ".join(sampled)
+            clause = f"{new_p} = {action} {new_p} {args_str}"
+            
+        else:
+            action1, req_pts1 = random.choice(actions_1dof)
+            action2, req_pts2 = random.choice(actions_1dof)
+            
+            sampled1 = random.sample(points, req_pts1)
+            sampled2 = random.sample(points, req_pts2)
+            
+            args_str1 = " ".join(sampled1)
+            args_str2 = " ".join(sampled2)
+            
+            clause = f"{new_p} = {action1} {new_p} {args_str1}, {action2} {new_p} {args_str2}"
         
         # 将新条件追加到总字符串中
         premises_str += f"; {clause}"
@@ -196,26 +210,11 @@ def generate_random_premises(num_extra_clauses=3):
     return f"synthetic_random_graph\n{premises_str}"
 
 
-def format_dep(dep, refs):
-    """
-    【新增】格式化工具函数：将 Dependency 对象转化为带引用编号的自然语言
-    """
-    # 解析参数名，处理可能仍是 Point 对象的参数
-    args_str = [arg.name if hasattr(arg, 'name') else str(arg) for arg in dep.args]
-    # 调用 pretty 转化为自然语言
-    nl = pretty.pretty_nl(dep.name, args_str) or pretty.pretty([dep.name] + args_str)
-    
-    # 尝试从全局 refs 字典中获取该定理的编号
-    h = dep.hashed()
-    if h in refs:
-        return f"{nl} [{refs[h]:02d}]"
-    return nl
-
-
-def generate_data(num_extra_clauses = 5, file_path = None):
+def generate_data(num_extra_clauses = 5, dof_chooser = 0.7, file_path = None):
     """
     生成合成几何数据
     :param num_extra_clauses: 额外添加的随机前提数量
+    :param dof_chooser: 选择 0dof 作图的概率，剩余概率为 1dof 作图
     :param file_path: 可选参数，指定将生成的数据保存到哪个文件
     """
     output_flag = True
@@ -241,16 +240,20 @@ def generate_data(num_extra_clauses = 5, file_path = None):
             print(f"\n=== 第 {generation_attempts} 次随机前提生成尝试 ===")
 
         # 模拟“随机采样前提”，随机连续作图若干次
-        simulated_random_premises = generate_random_premises(num_extra_clauses)
+        simulated_random_premises = generate_random_premises(num_extra_clauses, dof_chooser)
         if output_flag:
             print(f"[*] 初始随机字符串:\n{simulated_random_premises}\n")
 
         # 使用 Problem 类解析
-        p = problem.Problem.from_txt(simulated_random_premises, translate=True)
+        try:
+            p = problem.Problem.from_txt(simulated_random_premises, translate=True)
+        except Exception as e:
+            if output_flag: print(f"[-] 字符串解析失败 ({e})，正在重新生成...")
+            continue
     
         try:
             g, added_deps = graph.Graph.build_problem(p, definitions, verbose=False)
-        except ValueError as e:
+        except Exception as e:
             if output_flag:
                 print(f"[-] 生成了退化图形 ({e})，正在重新生成...")
             continue
@@ -258,16 +261,20 @@ def generate_data(num_extra_clauses = 5, file_path = None):
         if output_flag:
             print(f"[*] 建图成功！当前图内已有 {len(g.all_nodes())} 个初始节点。")
 
-        # 按照 ddar.solve 的真实签名传参
-        # g: 状态图, theorems: 规则列表, controller: 问题对象 p
-        # 因为生成数据时 p.goal 是 None，所以它会一直运行到 max_level 或饱和为止
-        g, level_times, status, branches, all_added = ddar.solve(
-            g, 
-            theorems, 
-            controller=p, 
-            max_level=1000, 
-            timeout=600
-        )
+        try:
+            # 按照 ddar.solve 的真实签名传参
+            # g: 状态图, theorems: 规则列表, controller: 问题对象 p
+            # 因为生成数据时 p.goal 是 None，所以它会一直运行到 max_level 或饱和为止
+            g, level_times, status, branches, all_added = ddar.solve(
+                g, 
+                theorems, 
+                controller=p, 
+                max_level=1000, 
+                timeout=60
+            )
+        except Exception as e:
+            if output_flag: print(f"[-] 符号演绎阶段异常 ({e})，已拦截...")
+            continue
 
         if output_flag:
             print(f"[*] 推导完成！图中当前共有 {len(g.all_nodes())} 个几何结论节点。")
@@ -280,7 +287,11 @@ def generate_data(num_extra_clauses = 5, file_path = None):
         target_dep = all_added[-1]
         
         # 提取原始逻辑链
-        setup_raw, aux_raw, log_raw, setup_points = trace_back.get_logs(target_dep, g, merge_trivials=True)
+        try:
+            setup_raw, aux_raw, log_raw, setup_points = trace_back.get_logs(target_dep, g, merge_trivials=True)
+        except Exception as e:
+            if output_flag: print(f"[-] 回溯树构建异常 ({e})，丢弃该数据...")
+            continue
 
         if file_path is not None and len(aux_raw) == 0:
             print("[-] 没有辅助点，重新生成")
@@ -330,7 +341,7 @@ def generate_data(num_extra_clauses = 5, file_path = None):
 
 def main():
     file_path = os.path.join(PROJECT_ROOT, 'synthetic_data.jsonl')
-    generate_data(20, None)
+    generate_data(5, 0.7, None)
 
 
 if __name__ == "__main__":
