@@ -31,7 +31,7 @@ def load_mini_ag_model(model_dir):
     """加载我们自己的 PyTorch 模型和分词器"""
     logging.info("正在加载自定义的 Mini-AlphaGeometry 模型...")
     tokenizer = GeometryTokenizer()
-    tokenizer.build_vocab_from_jsonl("traindata/synthetic_data.jsonl") 
+    tokenizer.build_vocab_from_jsonl("traindata/synthetic_data_v2.jsonl") 
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = GPT2LMHeadModel.from_pretrained(model_dir).to(device)
@@ -58,13 +58,14 @@ def generate_candidates_hf(model, tokenizer, device, pstring, beam_size):
     
     # 调用 HF 的波束搜索
     with torch.no_grad():
+        stop_token_id = tokenizer.vocab.get(";", tokenizer.vocab["<eos>"])
         outputs = model.generate(
             input_tensor,
             max_new_tokens = 20,
             num_beams = beam_size,
             num_return_sequences = beam_size,
             pad_token_id = tokenizer.vocab["<pad>"],
-            eos_token_id = tokenizer.vocab["<eos>"],
+            eos_token_id = stop_token_id,
             output_scores = True,
             return_dict_in_generate = True,
             early_stopping = True

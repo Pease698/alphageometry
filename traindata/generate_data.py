@@ -166,16 +166,21 @@ def generate_random_premises(num_extra_clauses = 3, dof_chooser = 0.7):
         ("midpoint", 2),       # 中点
         ("foot", 3),           # 垂足
         ("circumcenter", 3),   # 外心
-        ("orthocenter", 3)     # 垂心
+        ("orthocenter", 3),    # 垂心
+        ("incenter", 3)        # 内心
     ]
 
     # 两约束条件共同确定一个点
     actions_1dof = [
-        ("on_line", 2),    # 在两点连线上
-        ("on_bline", 2),   # 在两点中垂线上
-        ("on_pline", 3),   # on_pline p a b c   ->  p 在过 a 平行 bc 的线上
-        ("on_tline", 3),   # on_tline p a b c   ->  p 在过 a 垂直 bc 的线上
-        ("on_circum", 3)   # on_circum p a b c  ->  p 在 abc 外接圆上
+        ("on_line", 2),        # 连线上
+        ("on_bline", 2),       # 中垂线上
+        ("on_circle", 2),      # 圆上
+        ("on_dia", 2),         # 直径圆上
+        ("on_pline", 3),       # 平行线上
+        ("on_tline", 3),       # 垂直线上
+        ("on_circum", 3),      # 外接圆上
+        ("eqdistance", 3),     # 距离传递线上 (触发 PA=BC)
+        ("angle_bisector", 3)  # 角平分线上
     ]
     
     # 循环生成随机作图步骤
@@ -387,8 +392,8 @@ def worker_generate_single_graph(args):
 
 
 def main():
-    num_extra_clauses = 25
-    dof_chooser = 0.5
+    num_extra_clauses = 10
+    dof_chooser = 0
     num_targets = 50
     output_flag = True
     activation_threshold = 12
@@ -396,46 +401,46 @@ def main():
 
     print("=== 启动 AlphaGeometry 多核并发数据生成引擎 ===")
     
-    # generate_data(
-    #     num_extra_clauses,
-    #     dof_chooser,
-    #     num_targets,
-    #     output_flag
-    # )
+    generate_data(
+        num_extra_clauses,
+        dof_chooser,
+        num_targets,
+        output_flag
+    )
 
     # ======================================================================================
 
-    num_cores = multiprocessing.cpu_count()
-    # 防止电脑完全卡死
-    workers = max(1, num_cores - 4) 
-    print(f"[*] 检测到系统 CPU 核心数: {num_cores}，已分配 {workers} 个并发 Worker 进程。")
+    # num_cores = multiprocessing.cpu_count()
+    # # 防止电脑完全卡死
+    # workers = max(1, num_cores - 4) 
+    # print(f"[*] 检测到系统 CPU 核心数: {num_cores}，已分配 {workers} 个并发 Worker 进程。")
 
-    # 有效图数量
-    total_graphs_to_generate = 240
+    # # 有效图数量
+    # total_graphs_to_generate = 240
     
-    # 构建任务队列：(num_extra_clauses, num_targets, task_id)
-    tasks = [(num_extra_clauses, dof_chooser, num_targets, activation_threshold, i) for i in range(total_graphs_to_generate)]
+    # # 构建任务队列：(num_extra_clauses, num_targets, task_id)
+    # tasks = [(num_extra_clauses, dof_chooser, num_targets, activation_threshold, i) for i in range(total_graphs_to_generate)]
 
-    total_samples_saved = 0
+    # total_samples_saved = 0
 
-    # 开启进程池
-    with multiprocessing.Pool(processes = workers) as pool:
-        with open(file_path, 'a', encoding='utf-8') as f:
-            for i, result_batch in enumerate(pool.imap_unordered(worker_generate_single_graph, tasks)):
-                
-                # 集中落盘写入
-                for sample in result_batch:
-                    f.write(json.dumps(sample, ensure_ascii = False) + '\n')
-                
-                # 刷新缓冲区，防止程序意外中断时数据丢失
-                f.flush() 
-                
-                total_samples_saved += len(result_batch)
-                print(f"[*] 进度: 已处理图 {i+1}/{total_graphs_to_generate} | 本次新增样本: {len(result_batch)} | 总计收集样本: {total_samples_saved}")
+    # # 开启进程池
+    # with multiprocessing.Pool(processes = workers) as pool:
+    #     with open(file_path, 'a', encoding='utf-8') as f:
+    #         for i, result_batch in enumerate(pool.imap_unordered(worker_generate_single_graph, tasks)):
+    #             
+    #             # 集中落盘写入
+    #             for sample in result_batch:
+    #                 f.write(json.dumps(sample, ensure_ascii = False) + '\n')
+    #             
+    #             # 刷新缓冲区，防止程序意外中断时数据丢失
+    #             f.flush() 
+    #             
+    #             total_samples_saved += len(result_batch)
+    #             print(f"[*] 进度: 已处理图 {i+1}/{total_graphs_to_generate} | 本次新增样本: {len(result_batch)} | 总计收集样本: {total_samples_saved}")
 
-    print("========================================================")
-    print(f"大规模数据生成任务圆满完成！共计生成 {total_samples_saved} 条训练数据。")
-    print(f"数据已安全保存至: {file_path}")
+    # print("========================================================")
+    # print(f"大规模数据生成任务圆满完成！共计生成 {total_samples_saved} 条训练数据。")
+    # print(f"数据已安全保存至: {file_path}")
 
 
 if __name__ == "__main__":
