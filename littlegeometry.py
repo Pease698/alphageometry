@@ -61,7 +61,7 @@ def generate_candidates_hf(model, tokenizer, device, pstring, beam_size):
         stop_token_id = tokenizer.vocab.get(";", tokenizer.vocab["<eos>"])
         outputs = model.generate(
             input_tensor,
-            max_new_tokens = 20,
+            max_new_tokens = 50,
             num_beams = beam_size,
             num_return_sequences = beam_size,
             pad_token_id = tokenizer.vocab["<pad>"],
@@ -366,7 +366,7 @@ def format_lm_prediction(raw_str: str) -> str:
     return clean_str
 
 # ==============================================================================
-# 修改后的主循环: run_alphageometry
+# 主循环: run_alphageometry
 # ==============================================================================
 
 def run_alphageometry(model, tokenizer, device, p: pr.Problem, search_depth: int, beam_size: int, out_file: str) -> bool:
@@ -432,10 +432,9 @@ def main(_):
     
     this_problem = problems[_PROBLEM_NAME.value]
 
-    # 加载我们的微型模型
+    # 加载微型模型
     model, tokenizer, device = load_mini_ag_model(_MODEL_DIR.value)
     
-    # 运行大闭环
     run_alphageometry(
         model, tokenizer, device,
         this_problem,

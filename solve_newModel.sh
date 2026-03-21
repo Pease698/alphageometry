@@ -4,7 +4,7 @@ PROBLEMS_FILE="imo_ag_30.txt"
 PROBLEM_NAME="translated_imo_2004_p1"
 MODEL_DIR="./mini_ag_weights"
 OUT_FILE="solution_${PROBLEM_NAME}.txt"
-BEAM_SIZE=4
+BEAM_SIZE=2
 SEARCH_DEPTH=4
 
 echo "==========================================================="
